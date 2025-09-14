@@ -1,0 +1,67 @@
+# Logs directory
+logs/
+
+# Environment files with secrets
+.env
+
+# Development files
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Virtual environments
+.venv/
+venv/
+ENV/
+env/
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Temporary files
+*.tmp
+*.temp
+
+# Database files
+*.db
+*.sqlite3
+
+# Model files (if not needed in production)
+*.pkl
+*.joblib
+
+# Documentation build
+docs/_build/
+
+# Coverage reports
+htmlcov/
+.coverage
+.pytest_cache/
+
+# Local development certificates
+ssl/
