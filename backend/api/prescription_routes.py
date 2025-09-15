@@ -215,6 +215,12 @@ async def upload_prescription(
             }
         
         # Step 3: AMU Analysis
+        # Before running AMU/MRL, try a single Gemini pass to extract only medicines
+        try:
+            prescription_data = await _extract_medicines_with_gemini(prescription_data, rag_service, prescription_analysis.get("raw_text", ""))
+        except Exception as e:
+            logger.debug(f"Medicines extraction pass failed: {e}")
+
         amu_analysis = None
         if prescription_data.get("medications"):
             try:
@@ -433,6 +439,52 @@ def generate_unified_report(
             "details": str(e)
         }
 
+
+async def _extract_medicines_with_gemini(prescription_data: Dict[str, Any], rag_service: Optional[RAGService], raw_text: str) -> Dict[str, Any]:
+    """Call Gemini once (via RAGService) to detect and structure medicines from the prescription.
+
+    Returns potentially-updated prescription_data where 'medications' contains only the medicines detected by Gemini.
+    This function is defensive: if Gemini/refinement fails or returns nothing usable, the original prescription_data is returned unchanged.
+    """
+    try:
+        if not rag_service or not raw_text:
+            return prescription_data
+
+        # Use a targeted instruction to Gemini to return a JSON array of medicines only
+        instruction = (
+            "Extract and return ONLY the list of prescribed medicines from the following prescription text. "
+            "Return a JSON array of objects with keys: name, dose (if available), frequency (if available), duration (if available). "
+            "If no medicines are found, return an empty JSON array. Do not include any other text."
+        )
+
+        prompt_text = f"Instruction: {instruction}\n\nText:\n{raw_text}\n\nMedicines JSON:" 
+        response = await rag_service.refine_text_with_gemini(prompt_text)
+
+        # Try to parse JSON from the response
+        meds = None
+        try:
+            # If the assistant returned just the JSON, load it; otherwise try to extract the first JSON substring
+            resp = response.strip()
+            if resp.startswith('{') or resp.startswith('['):
+                meds = json.loads(resp)
+            else:
+                # attempt to find the first JSON array in the text
+                start = resp.find('[')
+                end = resp.rfind(']')
+                if start != -1 and end != -1 and end > start:
+                    meds = json.loads(resp[start:end+1])
+        except Exception:
+            meds = None
+
+        if isinstance(meds, list):
+            # Update prescription_data medications only if we got a list
+            prescription_data['medications'] = meds
+
+    except Exception as e:
+        logger.debug(f"Medicine extraction with Gemini failed or returned unusable data: {e}")
+
+    return prescription_data
+
 @router.get("/analyze/{animal_id}")
 async def get_animal_prescription_history(animal_id: str) -> Dict[str, Any]:
     """
@@ -577,10 +629,4 @@ async def get_agents_status() -> Dict[str, Any]:
     except Exception as e:
         logger.error(f"Error getting agent status: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to get status: {str(e)}")
-    """Validate prescription format and completeness"""
-    try:
-        validation_result = agent.validate_prescription_format(prescription_data)
-        
-    except Exception as e:
-        logger.error(f"Error getting agent status: {e}")
-        raise HTTPException(status_code=500, detail=f"Failed to get status: {str(e)}")
+    
